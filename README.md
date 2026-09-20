@@ -1,4 +1,4 @@
-# Candidate Triage
+# Recruitment Triage
 
 A full-stack recruiter workflow for browsing, filtering, shortlisting, and AI-matching candidates against job descriptions — built for GCCX Global.
 
