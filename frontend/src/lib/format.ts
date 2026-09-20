@@ -26,6 +26,6 @@ export function formatYears(yearsExperience: number): string {
   return `${yearsExperience} yr${yearsExperience === 1 ? '' : 's'}`;
 }
 
-export function formatDistance(distance: number): string {
-  return distance.toFixed(3);
+export function formatSimilarity(distance: number): string {
+  return `${Math.round((1 - distance) * 100)}%`;
 }

@@ -3,7 +3,6 @@ import { toast } from 'sonner';
 import {
   CaretLeftIcon,
   CaretRightIcon,
-  XIcon,
 } from '@phosphor-icons/react';
 import { CandidateDrawer } from '@/components/candidates/CandidateDrawer';
 import {
@@ -17,7 +16,7 @@ import { Header } from '@/components/layout/Header';
 import {
   MatchDialog,
 } from '@/components/matching/MatchDialog';
-import { MatchResults } from '@/components/matching/MatchResults';
+import { MatchResultsView } from '@/components/matching/MatchResultsView';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -75,7 +74,7 @@ export function CandidatesPage() {
   const [matchLoading, setMatchLoading] = useState(false);
   const [matchError, setMatchError] = useState<string | null>(null);
   const [matchResult, setMatchResult] = useState<MatchResponse | null>(null);
-  const [matchResultLoading, setMatchResultLoading] = useState(false);
+  const [view, setView] = useState<'candidates' | 'match'>('candidates');
 
   useEffect(() => {
     let ignore = false;
@@ -200,6 +199,16 @@ export function CandidatesPage() {
         : current,
     );
     setDrawerCandidate((current) => (current?.id === updated.id ? updated : current));
+    setMatchResult((current) =>
+      current
+        ? {
+            ...current,
+            results: current.results.map((item) =>
+              item.candidate.id === updated.id ? { ...item, candidate: updated } : item,
+            ),
+          }
+        : current,
+    );
   }
 
   const handleToggleShortlist = useCallback(async (candidate: Candidate) => {
@@ -217,6 +226,18 @@ export function CandidatesPage() {
     );
     setDrawerCandidate((current) =>
       current?.id === candidate.id ? { ...current, is_shortlisted: nextValue } : current,
+    );
+    setMatchResult((current) =>
+      current
+        ? {
+            ...current,
+            results: current.results.map((item) =>
+              item.candidate.id === candidate.id
+                ? { ...item, candidate: { ...item.candidate, is_shortlisted: nextValue } }
+                : item,
+            ),
+          }
+        : current,
     );
 
     try {
@@ -239,6 +260,18 @@ export function CandidatesPage() {
       setDrawerCandidate((current) =>
         current?.id === candidate.id ? { ...current, is_shortlisted: candidate.is_shortlisted } : current,
       );
+      setMatchResult((current) =>
+        current
+          ? {
+              ...current,
+              results: current.results.map((item) =>
+                item.candidate.id === candidate.id
+                  ? { ...item, candidate: { ...item.candidate, is_shortlisted: candidate.is_shortlisted } }
+                  : item,
+              ),
+            }
+          : current,
+      );
       toast.error(`Couldn't update shortlist: ${errorMessage(err)}`);
     }
   }, []);
@@ -253,11 +286,11 @@ export function CandidatesPage() {
   async function handleMatchSubmit(jobDescription: string, topK: number) {
     setMatchLoading(true);
     setMatchError(null);
-    setMatchResultLoading(true);
     try {
       const response = await matchCandidates(jobDescription, topK);
       setMatchResult(response);
       setMatchOpen(false);
+      setView('match');
     } catch (err) {
       const message =
         err instanceof ApiError && err.status === 503
@@ -266,13 +299,57 @@ export function CandidatesPage() {
       setMatchError(message);
     } finally {
       setMatchLoading(false);
-      setMatchResultLoading(false);
     }
   }
+
+  const handleBackToCandidates = useCallback(() => {
+    setView('candidates');
+  }, []);
+
+  const handleClearMatch = useCallback(() => {
+    setMatchResult(null);
+    setView('candidates');
+  }, []);
 
   const total = data?.total ?? 0;
   const fromItem = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const toItem = Math.min(page * pageSize, total);
+
+  if (view === 'match' && matchResult) {
+    return (
+      <div className="min-h-dvh bg-background">
+        <Header onOpenMatch={() => setMatchOpen(true)} />
+
+        <main className="mx-auto max-w-6xl px-4 sm:px-6">
+          <div className="mt-6">
+            <MatchResultsView
+              result={matchResult}
+              onBack={handleBackToCandidates}
+              onClear={handleClearMatch}
+              onToggleShortlist={handleToggleShortlist}
+              onSelectCandidate={handleSelectCandidate}
+            />
+          </div>
+        </main>
+
+        <MatchDialog
+          open={matchOpen}
+          onOpenChange={setMatchOpen}
+          onSubmit={handleMatchSubmit}
+          loading={matchLoading}
+          error={matchError}
+        />
+
+        <CandidateDrawer
+          candidate={drawerCandidate}
+          onOpenChange={(open) => {
+            if (!open) setDrawerCandidate(null);
+          }}
+          onToggleShortlist={handleToggleShortlist}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-dvh bg-background">
@@ -369,48 +446,6 @@ export function CandidatesPage() {
               </Button>
             </div>
           </div>
-        ) : null}
-
-        {matchResult ? (
-          <section className="mt-8 pb-12" aria-label="AI match results">
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-sm font-semibold text-foreground">AI Match results</h2>
-                <p className="mt-0.5 max-w-2xl truncate text-xs text-muted-foreground">
-                  {matchResult.job_description}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {matchResult.results.length} candidate{matchResult.results.length === 1 ? '' : 's'}{' '}
-                  screened · top {matchResult.top_k_requested}
-                </p>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setMatchResult(null)}
-                aria-label="Clear AI match results"
-              >
-                <XIcon className="size-3.5" />
-                Clear results
-              </Button>
-            </div>
-
-            {matchResultLoading ? (
-              <div className="space-y-3">
-                {Array.from({ length: 2 }).map((_, index) => (
-                  <div key={index} className="border border-border bg-card p-4">
-                    <Skeleton className="h-5 w-64 rounded-none" />
-                    <Skeleton className="mt-3 h-24 w-full rounded-none" />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <MatchResults
-                result={matchResult}
-                onSelectCandidate={handleSelectCandidate}
-              />
-            )}
-          </section>
         ) : null}
       </main>
 
