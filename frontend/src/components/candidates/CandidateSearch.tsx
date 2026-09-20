@@ -36,7 +36,7 @@ export function CandidateSearch({
         onChange={(event) => onChange(event.target.value)}
         placeholder="Search candidates, press Enter to search"
         aria-label="Search candidates"
-        className="pr-8 pl-9"
+        className="pr-8 pl-9 [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:hidden"
         disabled={disabled}
       />
       {value ? (

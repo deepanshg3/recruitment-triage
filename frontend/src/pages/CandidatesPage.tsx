@@ -137,12 +137,13 @@ export function CandidatesPage() {
 
   const activeCount = useMemo(
     () =>
+      (appliedSearch !== '' ? 1 : 0) +
       (filters.target_role.length > 0 ? 1 : 0) +
       (filters.source.length > 0 ? 1 : 0) +
       (filters.skills.length > 0 ? 1 : 0) +
       (filters.min_experience !== undefined || filters.max_experience !== undefined ? 1 : 0) +
       (filters.is_shortlisted !== undefined ? 1 : 0),
-    [filters],
+    [appliedSearch, filters],
   );
 
   const handleSearchChange = useCallback((value: string) => {
@@ -167,6 +168,8 @@ export function CandidatesPage() {
 
   const handleClearFilters = useCallback(() => {
     setFilters(EMPTY_FILTERS);
+    setSearchText('');
+    setAppliedSearch('');
     setPage(1);
   }, []);
 
@@ -283,6 +286,8 @@ export function CandidatesPage() {
           onChange={handleChangeFilters}
           onClear={handleClearFilters}
           activeCount={activeCount}
+          search={appliedSearch}
+          onRemoveSearch={handleSearchClear}
           disabled={loading}
         />
 

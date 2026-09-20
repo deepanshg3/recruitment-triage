@@ -27,6 +27,9 @@ type CandidateFiltersProps = {
   onChange: (updated: CandidateFilterValues) => void;
   onClear: () => void;
   activeCount: number;
+  /** Applied search query; rendered as a removable chip in the filter area. */
+  search?: string;
+  onRemoveSearch: () => void;
   disabled?: boolean;
 };
 
@@ -91,6 +94,8 @@ export function CandidateFilters({
   onChange,
   onClear,
   activeCount,
+  search,
+  onRemoveSearch,
   disabled,
 }: CandidateFiltersProps) {
   const shortlisted: 'any' | 'true' | 'false' =
@@ -121,6 +126,9 @@ export function CandidateFilters({
   }
 
   const chips: { key: string; label: string; onRemove: () => void }[] = [
+    ...(search
+      ? [{ key: 'search', label: `Search: ${search}`, onRemove: onRemoveSearch }]
+      : []),
     ...value.target_role.map((role) => ({ key: `role-${role}`, label: role, onRemove: () => removeRole(role) })),
     ...value.source.map((source) => ({ key: `source-${source}`, label: source, onRemove: () => removeSource(source) })),
     ...value.skills.map((skill) => ({ key: `skill-${skill}`, label: skill, onRemove: () => removeSkill(skill) })),
