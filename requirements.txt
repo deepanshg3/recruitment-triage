@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+sqlalchemy
+pydantic
+pydantic-settings
+sqlite-vec
+google-genai
+pytest
+httpx

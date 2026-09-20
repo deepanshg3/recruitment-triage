@@ -1,0 +1,227 @@
+import {
+  CaretDownIcon,
+  CaretUpIcon,
+  CaretUpDownIcon,
+} from '@phosphor-icons/react';
+import {
+  createColumnHelper,
+  flexRender,
+  getCoreRowModel,
+  useReactTable,
+} from '@tanstack/react-table';
+import { Badge } from '@/components/ui/badge';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { formatAppliedDate, formatYears } from '@/lib/format';
+import type { Candidate, CandidateSortField, SortOrder } from '@/lib/types';
+import { ShortlistButton } from './ShortlistButton';
+
+const columnHelper = createColumnHelper<Candidate>();
+
+const NAMED_COLUMNS = new Set<CandidateSortField>(['name', 'target_role', 'years_experience', 'applied_date']);
+
+type SortHeaderProps = {
+  label: string;
+  id: CandidateSortField;
+  sortBy: CandidateSortField;
+  sortOrder: SortOrder;
+  onSortChange: (field: CandidateSortField) => void;
+};
+
+function SortHeader({ label, id, sortBy, sortOrder, onSortChange }: SortHeaderProps) {
+  const isActive = sortBy === id;
+  const nextOrder: SortOrder = !isActive ? 'asc' : sortOrder === 'asc' ? 'desc' : 'asc';
+  const Icon = !isActive ? CaretUpDownIcon : sortOrder === 'asc' ? CaretUpIcon : CaretDownIcon;
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSortChange(id)}
+      aria-label={`Sort by ${label} ${nextOrder === 'asc' ? 'ascending' : 'descending'}`}
+      className="group inline-flex items-center gap-1 uppercase hover:text-foreground"
+    >
+      {label}
+      <Icon
+        className={`size-3.5 ${isActive ? 'text-primary' : 'text-muted-foreground/60 group-hover:text-muted-foreground'}`}
+        weight={isActive ? 'fill' : 'regular'}
+      />
+    </button>
+  );
+}
+
+type CandidateTableProps = {
+  candidates: Candidate[];
+  sortBy: CandidateSortField;
+  sortOrder: SortOrder;
+  onSortChange: (field: CandidateSortField) => void;
+  onSelectCandidate: (candidate: Candidate) => void;
+  onToggleShortlist: (candidate: Candidate) => void;
+  disabled?: boolean;
+};
+
+export function CandidateTable({
+  candidates,
+  sortBy,
+  sortOrder,
+  onSortChange,
+  onSelectCandidate,
+  onToggleShortlist,
+  disabled,
+}: CandidateTableProps) {
+  const sorting = [{ id: sortBy, desc: sortOrder === 'desc' }];
+
+  const columns = [
+    columnHelper.display({
+      id: 'shortlist',
+      header: () => (
+        <span className="sr-only">Shortlist</span>
+      ),
+      cell: ({ row }) => (
+        <ShortlistButton
+          candidate={row.original}
+          onToggle={onToggleShortlist}
+          disabled={disabled}
+        />
+      ),
+      enableSorting: false,
+      meta: { className: 'w-10' },
+    }),
+    columnHelper.accessor('name', {
+      id: 'name',
+      header: () => <SortHeader label="Name" id="name" sortBy={sortBy} sortOrder={sortOrder} onSortChange={onSortChange} />,
+      cell: ({ row }) => (
+        <button
+          type="button"
+          onClick={() => onSelectCandidate(row.original)}
+          className="text-left text-sm font-medium text-foreground underline-offset-4 hover:text-primary hover:underline"
+        >
+          {row.original.name}
+        </button>
+      ),
+    }),
+    columnHelper.accessor('target_role', {
+      id: 'target_role',
+      header: () => <SortHeader label="Role" id="target_role" sortBy={sortBy} sortOrder={sortOrder} onSortChange={onSortChange} />,
+      cell: ({ row }) => <span className="text-sm text-foreground">{row.original.target_role}</span>,
+    }),
+    columnHelper.accessor('years_experience', {
+      id: 'years_experience',
+      header: () => <SortHeader label="Experience" id="years_experience" sortBy={sortBy} sortOrder={sortOrder} onSortChange={onSortChange} />,
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground tabular-nums">
+          {formatYears(row.original.years_experience)}
+        </span>
+      ),
+    }),
+    columnHelper.accessor('skills', {
+      id: 'skills',
+      header: () => <span className="uppercase">Skills</span>,
+      enableSorting: false,
+      cell: ({ row }) => <SkillsCell skills={row.original.skills} />,
+    }),
+    columnHelper.accessor('source', {
+      id: 'source',
+      header: () => <span className="uppercase">Source</span>,
+      enableSorting: false,
+      cell: ({ row }) => <span className="text-sm text-foreground">{row.original.source}</span>,
+    }),
+    columnHelper.accessor('applied_date', {
+      id: 'applied_date',
+      header: () => <SortHeader label="Applied" id="applied_date" sortBy={sortBy} sortOrder={sortOrder} onSortChange={onSortChange} />,
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground tabular-nums">
+          {formatAppliedDate(row.original.applied_date)}
+        </span>
+      ),
+    }),
+  ];
+
+  const table = useReactTable({
+    data: candidates,
+    columns,
+    state: { sorting },
+    manualSorting: true,
+    getCoreRowModel: getCoreRowModel(),
+    getRowId: (row) => String(row.id),
+  });
+
+  const headerGroups = table.getHeaderGroups();
+  const rows = table.getRowModel().rows;
+
+  if (candidates.length === 0) {
+    return (
+      <div className="border border-border bg-card p-12 text-center">
+        <p className="text-sm text-muted-foreground">No candidates found.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto border border-border bg-card">
+      <Table className="min-w-[760px]">
+        <TableHeader>
+          {headerGroups.map((headerGroup) => (
+            <TableRow key={headerGroup.id} className="border-b border-border bg-muted/50 hover:bg-muted/50">
+              {headerGroup.headers.map((header) => (
+                <TableHead
+                  key={header.id}
+                  className={`h-9 px-3 text-[11px] font-semibold tracking-wide text-muted-foreground ${
+                    NAMED_COLUMNS.has(header.id as CandidateSortField) ? 'cursor-pointer select-none' : ''
+                  } ${String((header.column.columnDef.meta as { className?: string } | undefined)?.className ?? '')}`}
+                  aria-sort={
+                    header.column.getIsSorted() === 'asc'
+                      ? 'ascending'
+                      : header.column.getIsSorted() === 'desc'
+                        ? 'descending'
+                        : undefined
+                  }
+                >
+                  {header.isPlaceholder
+                    ? null
+                    : flexRender(header.column.columnDef.header, header.getContext())}
+                </TableHead>
+              ))}
+            </TableRow>
+          ))}
+        </TableHeader>
+        <TableBody>
+          {rows.map((row) => (
+            <TableRow
+              key={row.id}
+              data-state={row.original.is_shortlisted ? 'shortlisted' : undefined}
+              className="hover:bg-muted/40 data-[state=shortlisted]:bg-primary/[0.04]"
+            >
+              {row.getVisibleCells().map((cell) => (
+                <TableCell
+                  key={cell.id}
+                  className={`px-3 py-2.5 align-middle ${
+                    String((cell.column.columnDef.meta as { className?: string } | undefined)?.className ?? '')
+                  }`}
+                >
+                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                </TableCell>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+function SkillsCell({ skills }: { skills: string[] }) {
+  const visible = skills.slice(0, 3);
+  const extra = skills.length - visible.length;
+
+  return (
+    <div className="flex max-w-[260px] flex-wrap items-center gap-1">
+      {visible.map((skill) => (
+        <Badge key={skill} variant="secondary" className="text-[11px]">
+          {skill}
+        </Badge>
+      ))}
+      {extra > 0 ? (
+        <span className="text-[11px] font-medium text-muted-foreground">+{extra}</span>
+      ) : null}
+    </div>
+  );
+}
