@@ -1,87 +1,153 @@
-import { useState } from 'react';
-import { SlidersIcon } from '@phosphor-icons/react';
+import { useEffect, useState } from 'react';
+import { SlidersIcon, XIcon } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { MultiSelect } from './MultiSelect';
 
 export type CandidateFilterValues = {
-  target_role: string;
-  source: string;
+  target_role: string[];
+  source: string[];
   skills: string[];
   min_experience?: number;
   max_experience?: number;
   is_shortlisted?: boolean;
 };
 
+export type FilterOptions = {
+  roles: string[];
+  sources: string[];
+  skills: string[];
+};
+
 type CandidateFiltersProps = {
   value: CandidateFilterValues;
-  onApply: (value: CandidateFilterValues) => void;
+  options: FilterOptions;
+  onChange: (updated: CandidateFilterValues) => void;
   onClear: () => void;
-  hasActiveFilters: boolean;
+  activeCount: number;
   disabled?: boolean;
 };
 
-const parseSkills = (text: string): string[] =>
-  text
-    .split(',')
-    .map((part) => part.trim())
-    .filter(Boolean);
+function parseExperience(raw: string): number | undefined {
+  if (raw.trim() === '') return undefined;
+  const value = Math.trunc(Number(raw));
+  return Number.isFinite(value) && value >= 0 ? value : undefined;
+}
 
-export function CandidateFilters({
-  value,
-  onApply,
-  onClear,
-  hasActiveFilters,
+function CommitInput({
+  id,
+  label,
+  placeholder,
+  rawValue,
   disabled,
-}: CandidateFiltersProps) {
-  const [targetRole, setTargetRole] = useState(value.target_role);
-  const [source, setSource] = useState(value.source);
-  const [skillsText, setSkillsText] = useState(value.skills.join(', '));
-  const [minExperience, setMinExperience] = useState(
-    value.min_experience === undefined ? '' : String(value.min_experience),
-  );
-  const [maxExperience, setMaxExperience] = useState(
-    value.max_experience === undefined ? '' : String(value.max_experience),
-  );
-  const [shortlisted, setShortlisted] = useState<string>(
-    value.is_shortlisted === undefined ? 'any' : value.is_shortlisted ? 'true' : 'false',
-  );
+  onCommit,
+}: {
+  id: string;
+  label: string;
+  placeholder: string;
+  rawValue: string;
+  disabled?: boolean;
+  onCommit: (value: number | undefined) => void;
+}) {
+  const [draft, setDraft] = useState(rawValue);
 
-  function handleApply() {
-    onApply({
-      target_role: targetRole.trim(),
-      source: source.trim(),
-      skills: parseSkills(skillsText),
-      min_experience:
-        minExperience === '' ? undefined : Math.max(0, Math.trunc(Number(minExperience))),
-      max_experience:
-        maxExperience === '' ? undefined : Math.max(0, Math.trunc(Number(maxExperience))),
-      is_shortlisted: shortlisted === 'any' ? undefined : shortlisted === 'true',
-    });
-  }
+  useEffect(() => {
+    setDraft(rawValue);
+  }, [rawValue]);
 
-  function handleClear() {
-    setTargetRole('');
-    setSource('');
-    setSkillsText('');
-    setMinExperience('');
-    setMaxExperience('');
-    setShortlisted('any');
-    onClear();
+  function commit() {
+    onCommit(parseExperience(draft));
   }
 
   return (
-    <section
-      aria-label="Filters"
-      className="rounded-none border border-border bg-card p-4"
-    >
+    <div>
+      <Label htmlFor={id} className="mb-1.5 block text-xs text-muted-foreground">
+        {label}
+      </Label>
+      <Input
+        id={id}
+        type="number"
+        min={0}
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.currentTarget.blur();
+          }
+        }}
+        placeholder={placeholder}
+        disabled={disabled}
+      />
+    </div>
+  );
+}
+
+export function CandidateFilters({
+  value,
+  options,
+  onChange,
+  onClear,
+  activeCount,
+  disabled,
+}: CandidateFiltersProps) {
+  const shortlisted: 'any' | 'true' | 'false' =
+    value.is_shortlisted === undefined ? 'any' : value.is_shortlisted ? 'true' : 'false';
+
+  function update(partial: Partial<CandidateFilterValues>) {
+    onChange({ ...value, ...partial });
+  }
+
+  function removeRole(role: string) {
+    update({ target_role: value.target_role.filter((v) => v !== role) });
+  }
+
+  function removeSource(source: string) {
+    update({ source: value.source.filter((v) => v !== source) });
+  }
+
+  function removeSkill(skill: string) {
+    update({ skills: value.skills.filter((v) => v !== skill) });
+  }
+
+  function removeShortlist() {
+    update({ is_shortlisted: undefined });
+  }
+
+  function removeExperience() {
+    update({ min_experience: undefined, max_experience: undefined });
+  }
+
+  const chips: { key: string; label: string; onRemove: () => void }[] = [
+    ...value.target_role.map((role) => ({ key: `role-${role}`, label: role, onRemove: () => removeRole(role) })),
+    ...value.source.map((source) => ({ key: `source-${source}`, label: source, onRemove: () => removeSource(source) })),
+    ...value.skills.map((skill) => ({ key: `skill-${skill}`, label: skill, onRemove: () => removeSkill(skill) })),
+    ...(value.is_shortlisted !== undefined
+      ? [{
+          key: 'shortlisted',
+          label: value.is_shortlisted ? 'Shortlisted' : 'Not shortlisted',
+          onRemove: removeShortlist,
+        }]
+      : []),
+    ...(value.min_experience !== undefined || value.max_experience !== undefined
+      ? [{
+          key: 'experience',
+          label: experienceLabel(value.min_experience, value.max_experience),
+          onRemove: removeExperience,
+        }]
+      : []),
+  ];
+
+  return (
+    <section aria-label="Filters" className="rounded-none border border-border bg-card p-4">
       <div className="mb-3 flex items-center gap-2">
         <SlidersIcon className="size-4 text-primary" />
         <h2 className="text-xs font-semibold tracking-wide text-foreground uppercase">Filters</h2>
-        {hasActiveFilters ? (
+        {activeCount > 0 ? (
           <span className="rounded-none bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-            Active
+            {activeCount} active
           </span>
         ) : null}
       </div>
@@ -91,11 +157,13 @@ export function CandidateFilters({
           <Label htmlFor="filter-role" className="mb-1.5 block text-xs text-muted-foreground">
             Target role
           </Label>
-          <Input
-            id="filter-role"
-            value={targetRole}
-            onChange={(event) => setTargetRole(event.target.value)}
-            placeholder="e.g. Backend Engineer"
+          <MultiSelect
+            triggerId="filter-role"
+            label="Target role"
+            placeholder="Any role"
+            options={options.roles}
+            values={value.target_role}
+            onChange={(roles) => update({ target_role: roles })}
             disabled={disabled}
           />
         </div>
@@ -104,11 +172,13 @@ export function CandidateFilters({
           <Label htmlFor="filter-source" className="mb-1.5 block text-xs text-muted-foreground">
             Source
           </Label>
-          <Input
-            id="filter-source"
-            value={source}
-            onChange={(event) => setSource(event.target.value)}
-            placeholder="e.g. LinkedIn"
+          <MultiSelect
+            triggerId="filter-source"
+            label="Source"
+            placeholder="Any source"
+            options={options.sources}
+            values={value.source}
+            onChange={(sources) => update({ source: sources })}
             disabled={disabled}
           />
         </div>
@@ -117,44 +187,34 @@ export function CandidateFilters({
           <Label htmlFor="filter-skills" className="mb-1.5 block text-xs text-muted-foreground">
             Skills
           </Label>
-          <Input
-            id="filter-skills"
-            value={skillsText}
-            onChange={(event) => setSkillsText(event.target.value)}
-            placeholder="All of: Python, FastAPI"
+          <MultiSelect
+            triggerId="filter-skills"
+            label="Skills"
+            placeholder="Any skill"
+            options={options.skills}
+            values={value.skills}
+            onChange={(skills) => update({ skills })}
             disabled={disabled}
           />
         </div>
 
-        <div className="col-span-1">
-          <Label htmlFor="filter-min-exp" className="mb-1.5 block text-xs text-muted-foreground">
-            Min experience
-          </Label>
-          <Input
-            id="filter-min-exp"
-            type="number"
-            min={0}
-            value={minExperience}
-            onChange={(event) => setMinExperience(event.target.value)}
-            placeholder="0"
-            disabled={disabled}
-          />
-        </div>
+        <CommitInput
+          id="filter-min-exp"
+          label="Min experience"
+          placeholder="0"
+          rawValue={value.min_experience === undefined ? '' : String(value.min_experience)}
+          disabled={disabled}
+          onCommit={(minExperience) => update({ min_experience: minExperience })}
+        />
 
-        <div className="col-span-1">
-          <Label htmlFor="filter-max-exp" className="mb-1.5 block text-xs text-muted-foreground">
-            Max experience
-          </Label>
-          <Input
-            id="filter-max-exp"
-            type="number"
-            min={0}
-            value={maxExperience}
-            onChange={(event) => setMaxExperience(event.target.value)}
-            placeholder="No limit"
-            disabled={disabled}
-          />
-        </div>
+        <CommitInput
+          id="filter-max-exp"
+          label="Max experience"
+          placeholder="No limit"
+          rawValue={value.max_experience === undefined ? '' : String(value.max_experience)}
+          disabled={disabled}
+          onCommit={(maxExperience) => update({ max_experience: maxExperience })}
+        />
 
         <div className="col-span-1">
           <Label htmlFor="filter-shortlisted" className="mb-1.5 block text-xs text-muted-foreground">
@@ -162,7 +222,9 @@ export function CandidateFilters({
           </Label>
           <Select
             value={shortlisted}
-            onValueChange={(next) => setShortlisted(next)}
+            onValueChange={(next) =>
+              update({ is_shortlisted: next === 'any' ? undefined : next === 'true' })
+            }
             disabled={disabled}
           >
             <SelectTrigger id="filter-shortlisted" className="w-full">
@@ -177,14 +239,47 @@ export function CandidateFilters({
         </div>
       </div>
 
-      <div className="mt-4 flex items-center gap-2">
-        <Button variant="default" size="sm" onClick={handleApply} disabled={disabled}>
-          Apply filters
-        </Button>
-        <Button variant="outline" size="sm" onClick={handleClear} disabled={disabled}>
-          Clear
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        {chips.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {chips.map((chip) => (
+              <span
+                key={chip.key}
+                className="inline-flex items-center gap-1 border border-border bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground"
+              >
+                {chip.label}
+                <button
+                  type="button"
+                  onClick={chip.onRemove}
+                  aria-label={`Remove ${chip.label} filter`}
+                  className="text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <XIcon className="size-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        ) : (
+          <span />
+        )}
+
+        <Button variant="outline" size="sm" onClick={onClear} disabled={disabled || activeCount === 0}>
+          Clear filters
         </Button>
       </div>
     </section>
   );
+}
+
+function experienceLabel(minExperience?: number, maxExperience?: number): string {
+  if (minExperience !== undefined && maxExperience !== undefined) {
+    return `${minExperience}–${maxExperience} yrs`;
+  }
+  if (minExperience !== undefined) {
+    return `${minExperience}+ yrs`;
+  }
+  if (maxExperience !== undefined) {
+    return `≤ ${maxExperience} yrs`;
+  }
+  return '';
 }

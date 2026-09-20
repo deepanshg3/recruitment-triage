@@ -66,10 +66,14 @@ export function listCandidates(params: CandidateListParams): Promise<CandidateLi
   };
 
   set('search', params.search);
-  set('target_role', params.target_role);
   set('min_experience', params.min_experience);
   set('max_experience', params.max_experience);
-  set('source', params.source);
+  if (params.target_role && params.target_role.length > 0) {
+    set('target_role', params.target_role.join(','));
+  }
+  if (params.source && params.source.length > 0) {
+    set('source', params.source.join(','));
+  }
   if (params.skills && params.skills.length > 0) {
     set('skills', params.skills.join(','));
   }

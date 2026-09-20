@@ -24,10 +24,12 @@ router = APIRouter(prefix="/candidates", tags=["Candidates"])
     summary="List candidates",
     description=(
         "Deterministic recruiter listing. Filters combine with AND logic, text "
-        "filters are case-insensitive and whitespace-normalized. Skills accepts "
-        "a comma-separated list; a candidate must contain ALL requested skills. "
-        "Sorting is restricted to a whitelist with stable id tie-breaking. "
-        "This endpoint never calls the LLM."
+        "filters are case-insensitive and whitespace-normalized. target_role "
+        "and source accept comma-separated lists where multiple values are "
+        "OR-ed together (e.g. `target_role=Backend Engineer,Full-Stack "
+        "Engineer`). Skills accepts a comma-separated list; a candidate must "
+        "contain ALL requested skills. Sorting is restricted to a whitelist "
+        "with stable id tie-breaking. This endpoint never calls the LLM."
     ),
 )
 def list_candidates_endpoint(

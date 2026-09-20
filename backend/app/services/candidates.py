@@ -66,6 +66,23 @@ def _parse_skills(value: str | None) -> list[str]:
     return parts
 
 
+def _parse_or_list(value: str | None, *, name: str) -> list[str]:
+    """Parse a comma-separated filter into normalized, lowercased values.
+
+    Values within one category are OR-ed with each other; the empty string is
+    not a valid value (callers pass ``None`` to skip the filter entirely).
+    """
+    if value is None:
+        return []
+    parts = [_normalize(p) for p in value.split(",")]
+    parts = [p for p in parts if p]
+    if not parts:
+        raise InvalidQueryError(
+            f"Invalid value for '{name}': got {value!r}. Provide at least one value."
+        )
+    return [p.lower() for p in parts]
+
+
 def _validate_pagination(page: int, page_size: int) -> None:
     if page < 1:
         raise InvalidQueryError(
@@ -123,12 +140,12 @@ def _matches(candidate: Candidate, filters: dict) -> bool:
         if not any(q in (h or "").lower() for h in haystacks):
             return False
 
-    if filters["target_role"] is not None and (_normalize(candidate.target_role) or "").lower() != filters["target_role"].lower():
+    candidate_role = (_normalize(candidate.target_role) or "").lower()
+    if filters["target_role"] and candidate_role not in filters["target_role"]:
         return False
 
-    if filters["source"] is not None and (_normalize(candidate.source) or "").lower() != (
-        filters["source"].lower()
-    ):
+    candidate_source = (_normalize(candidate.source) or "").lower()
+    if filters["source"] and candidate_source not in filters["source"]:
         return False
 
     if filters["min_experience"] is not None and (
@@ -187,6 +204,9 @@ def list_candidates(
 ) -> CandidatePage:
     """Return one page of candidates satisfying ALL supplied filters.
 
+    ``target_role`` and ``source`` accept comma-separated lists; multiple
+    values within one list are OR-ed together. ``skills`` accepts a
+    comma-separated list and a candidate must contain ALL requested skills.
     Raises InvalidQueryError for invalid filter/sort/pagination values.
     """
     _validate_sort(sort_by, sort_order)
@@ -195,23 +215,20 @@ def list_candidates(
 
     parsed_shortlist = _parse_bool(is_shortlisted, name="is_shortlisted")
     parsed_skills = _parse_skills(skills)
+    parsed_roles = _parse_or_list(target_role, name="target_role")
+    parsed_sources = _parse_or_list(source, name="source")
 
     filters = {
         "search": _normalize(search),
-        "target_role": _normalize(target_role),
+        "target_role": parsed_roles,
         "min_experience": min_experience,
         "max_experience": max_experience,
-        "source": _normalize(source),
+        "source": parsed_sources,
         "skills": parsed_skills,
         "is_shortlisted": parsed_shortlist,
     }
 
     candidates = db.execute(select(Candidate)).scalars().all()
-    # Normalized filter is always lowercase; matching lowercases candidate data.
-    if filters["target_role"] is not None:
-        filters["target_role"] = filters["target_role"].lower()
-    if filters["source"] is not None:
-        filters["source"] = filters["source"].lower()
 
     filtered = [c for c in candidates if _matches(c, filters)]
     # Two-pass stable sort: base order by id, then by the primary sort field.

@@ -9,6 +9,7 @@ import { CandidateDrawer } from '@/components/candidates/CandidateDrawer';
 import {
   CandidateFilters,
   type CandidateFilterValues,
+  type FilterOptions,
 } from '@/components/candidates/CandidateFilters';
 import { CandidateSearch } from '@/components/candidates/CandidateSearch';
 import { CandidateTable } from '@/components/candidates/CandidateTable';
@@ -28,13 +29,13 @@ import type {
   MatchResponse,
   SortOrder,
 } from '@/lib/types';
-import { useDebouncedValue } from '@/hooks/use-debounced-value';
 
 const PAGE_SIZE = 20;
+const OPTIONS_PAGE_SIZE = 100;
 
 const EMPTY_FILTERS: CandidateFilterValues = {
-  target_role: '',
-  source: '',
+  target_role: [],
+  source: [],
   skills: [],
 };
 
@@ -45,11 +46,20 @@ function errorMessage(error: unknown): string {
   return 'Something went wrong. Please try again.';
 }
 
+function uniqueSorted(values: string[]): string[] {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b),
+  );
+}
+
+const EMPTY_OPTIONS: FilterOptions = { roles: [], sources: [], skills: [] };
+
 export function CandidatesPage() {
   const [searchText, setSearchText] = useState('');
-  const debouncedSearch = useDebouncedValue(searchText, 350) ?? '';
+  const [appliedSearch, setAppliedSearch] = useState('');
 
   const [filters, setFilters] = useState<CandidateFilterValues>(EMPTY_FILTERS);
+  const [filterOptions, setFilterOptions] = useState<FilterOptions>(EMPTY_OPTIONS);
   const [sortBy, setSortBy] = useState<CandidateSortField>('name');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [page, setPage] = useState(1);
@@ -70,13 +80,14 @@ export function CandidatesPage() {
 
   useEffect(() => {
     let ignore = false;
+
     setLoading(true);
     setError(null);
 
     listCandidates({
-      search: debouncedSearch || undefined,
-      target_role: filters.target_role || undefined,
-      source: filters.source || undefined,
+      search: appliedSearch || undefined,
+      target_role: filters.target_role.length > 0 ? filters.target_role : undefined,
+      source: filters.source.length > 0 ? filters.source : undefined,
       skills: filters.skills.length > 0 ? filters.skills : undefined,
       min_experience: filters.min_experience,
       max_experience: filters.max_experience,
@@ -100,25 +111,56 @@ export function CandidatesPage() {
     return () => {
       ignore = true;
     };
-  }, [debouncedSearch, filters, sortBy, sortOrder, page, pageSize, refreshKey]);
+  }, [appliedSearch, filters, sortBy, sortOrder, page, pageSize, refreshKey]);
 
-  const hasActiveFilters = useMemo(
+  useEffect(() => {
+    let ignore = false;
+
+    listCandidates({ page_size: OPTIONS_PAGE_SIZE })
+      .then((response) => {
+        if (ignore) return;
+        setFilterOptions({
+          roles: uniqueSorted(response.items.map((candidate) => candidate.target_role)),
+          sources: uniqueSorted(response.items.map((candidate) => candidate.source)),
+          skills: uniqueSorted(response.items.flatMap((candidate) => candidate.skills)),
+        });
+      })
+      .catch(() => {
+        if (ignore) return;
+        setFilterOptions(EMPTY_OPTIONS);
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  const activeCount = useMemo(
     () =>
-      filters.target_role !== '' ||
-      filters.source !== '' ||
-      filters.skills.length > 0 ||
-      filters.min_experience !== undefined ||
-      filters.max_experience !== undefined ||
-      filters.is_shortlisted !== undefined,
+      (filters.target_role.length > 0 ? 1 : 0) +
+      (filters.source.length > 0 ? 1 : 0) +
+      (filters.skills.length > 0 ? 1 : 0) +
+      (filters.min_experience !== undefined || filters.max_experience !== undefined ? 1 : 0) +
+      (filters.is_shortlisted !== undefined ? 1 : 0),
     [filters],
   );
 
   const handleSearchChange = useCallback((value: string) => {
     setSearchText(value);
+  }, []);
+
+  const handleSearchSubmit = useCallback((value: string) => {
+    setAppliedSearch(value);
     setPage(1);
   }, []);
 
-  const handleApplyFilters = useCallback((next: CandidateFilterValues) => {
+  const handleSearchClear = useCallback(() => {
+    setSearchText('');
+    setAppliedSearch('');
+    setPage(1);
+  }, []);
+
+  const handleChangeFilters = useCallback((next: CandidateFilterValues) => {
     setFilters(next);
     setPage(1);
   }, []);
@@ -225,22 +267,30 @@ export function CandidatesPage() {
       <Header onOpenMatch={() => setMatchOpen(true)} />
 
       <main className="mx-auto max-w-6xl px-4 sm:px-6">
-        <div className="mt-6 mb-4 flex flex-wrap items-center justify-between gap-3">
-          <CandidateSearch value={searchText} onChange={handleSearchChange} disabled={loading} />
-          <p className="text-xs text-muted-foreground">
-            {loading ? 'Loading candidates…' : `${total} candidate${total === 1 ? '' : 's'}`}
-          </p>
+        <div className="mt-6 mb-4">
+          <CandidateSearch
+            value={searchText}
+            onChange={handleSearchChange}
+            onSubmit={handleSearchSubmit}
+            onClear={handleSearchClear}
+            disabled={loading}
+          />
         </div>
 
         <CandidateFilters
           value={filters}
-          onApply={handleApplyFilters}
+          options={filterOptions}
+          onChange={handleChangeFilters}
           onClear={handleClearFilters}
-          hasActiveFilters={hasActiveFilters}
+          activeCount={activeCount}
           disabled={loading}
         />
 
-        <div className="mt-4">
+        <p className="mt-3 text-xs text-muted-foreground">
+          {loading ? 'Loading candidates…' : `${total} candidate${total === 1 ? '' : 's'}`}
+        </p>
+
+        <div className="mt-2">
           {error ? (
             <Alert variant="destructive" className="mb-4">
               <AlertTitle>Unable to load candidates</AlertTitle>

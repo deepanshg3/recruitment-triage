@@ -126,6 +126,79 @@ def test_combined_filters_and_logic(api_client):
     assert set(_ids(r["items"])) == {"cand_a", "cand_c", "cand_e"}
 
 
+# --------------------------------------------- target_role/source OR lists ----
+def test_target_role_or_list(api_client):
+    r = api_client.get(
+        "/candidates",
+        params={"target_role": "Backend Engineer,Frontend Engineer"},
+    ).json()
+    assert set(_ids(r["items"])) == {"cand_a", "cand_b", "cand_c", "cand_e"}
+
+    # A single value still behaves exactly as before.
+    single = api_client.get(
+        "/candidates", params={"target_role": "Backend Engineer"}
+    ).json()
+    assert set(_ids(single["items"])) == {"cand_a", "cand_c", "cand_e"}
+
+
+def test_target_role_or_list_case_insensitive_and_duplicates(api_client):
+    case_mixed = api_client.get(
+        "/candidates",
+        params={"target_role": "backend engineer,FRONTEND Engineer"},
+    ).json()
+    assert set(_ids(case_mixed["items"])) == {"cand_a", "cand_b", "cand_c", "cand_e"}
+
+    dups = api_client.get(
+        "/candidates",
+        params={"target_role": "Backend Engineer,  backend  engineer "},
+    ).json()
+    assert set(_ids(dups["items"])) == {"cand_a", "cand_c", "cand_e"}
+
+
+def test_source_or_list(api_client):
+    r = api_client.get(
+        "/candidates", params={"source": "Naukri,AngelList"}
+    ).json()
+    assert set(_ids(r["items"])) == {"cand_a", "cand_c", "cand_d", "cand_e"}
+
+    single = api_client.get("/candidates", params={"source": "naukri"}).json()
+    assert set(_ids(single["items"])) == {"cand_a", "cand_c", "cand_e"}
+
+
+def test_or_lists_combine_with_and_across_categories(api_client):
+    r = api_client.get(
+        "/candidates",
+        params={
+            "target_role": "Backend Engineer,Frontend Engineer",  # OR
+            "source": "Naukri,LinkedIn",  # OR
+            "skills": "Python,FastAPI",  # ALL-of
+            "min_experience": 2,
+            "max_experience": 6,
+        },
+    ).json()
+    # Roles {a,b,c,e} AND sources {a,c,e,b} AND Python+FastAPI {a,e} AND 2-6yrs {a,e}
+    assert set(_ids(r["items"])) == {"cand_a", "cand_e"}
+
+
+def test_missing_role_or_source_match_nothing_non_blocking(api_client):
+    r = api_client.get(
+        "/candidates", params={"target_role": "ML Engineer,Backend Engineer"}
+    ).json()
+    assert _ids(r["items"]) == ["cand_a", "cand_c", "cand_e"]
+
+
+def test_skills_still_requires_all_skills_with_role_or(api_client):
+    r = api_client.get(
+        "/candidates",
+        params={
+            "target_role": "Backend Engineer,Data Engineer",
+            "skills": "Python,PostgreSQL",
+        },
+    ).json()
+    # Roles {a,c,e,d}; only Carol has both Python and PostgreSQL.
+    assert _ids(r["items"]) == ["cand_c"]
+
+
 def test_sort_by_experience_desc_with_stable_tie_break(api_client):
     r = api_client.get(
         "/candidates", params={"sort_by": "years_experience", "sort_order": "desc"}
@@ -179,6 +252,8 @@ def test_invalid_sort_returns_400(api_client, params):
         {"min_experience": "5", "max_experience": "2"},
         {"is_shortlisted": "maybe"},
         {"skills": " , "},
+        {"target_role": " , "},
+        {"source": ",  "},
     ],
 )
 def test_invalid_filter_values_return_400(api_client, params):

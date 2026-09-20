@@ -28,10 +28,13 @@ export type SortOrder = 'asc' | 'desc';
 
 export type CandidateListParams = {
   search?: string;
-  target_role?: string;
+  /** Multiple values are OR-ed together within the category. */
+  target_role?: string[];
   min_experience?: number;
   max_experience?: number;
-  source?: string;
+  /** Multiple values are OR-ed together within the category. */
+  source?: string[];
+  /** ALL selected skills must be present on a candidate. */
   skills?: string[];
   is_shortlisted?: boolean;
   sort_by?: CandidateSortField;
