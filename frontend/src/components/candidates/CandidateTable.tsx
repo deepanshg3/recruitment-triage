@@ -12,46 +12,60 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatAppliedDate, formatYears } from '@/lib/format';
-import type { Candidate, CandidateSortField, SortOrder } from '@/lib/types';
+import type { ActiveSort, Candidate, CandidateSortField } from '@/lib/types';
 import { ShortlistButton } from './ShortlistButton';
 
 const columnHelper = createColumnHelper<Candidate>();
 
 const NAMED_COLUMNS = new Set<CandidateSortField>(['name', 'target_role', 'years_experience', 'applied_date']);
 
+const PRIORITY_MARKS = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'];
+
 type SortHeaderProps = {
   label: string;
   id: CandidateSortField;
-  sortBy: CandidateSortField;
-  sortOrder: SortOrder;
+  sorts: ActiveSort[];
   onSortChange: (field: CandidateSortField) => void;
 };
 
-function SortHeader({ label, id, sortBy, sortOrder, onSortChange }: SortHeaderProps) {
-  const isActive = sortBy === id;
-  const nextOrder: SortOrder = !isActive ? 'asc' : sortOrder === 'asc' ? 'desc' : 'asc';
-  const Icon = !isActive ? CaretUpDownIcon : sortOrder === 'asc' ? CaretUpIcon : CaretDownIcon;
+function SortHeader({ label, id, sorts, onSortChange }: SortHeaderProps) {
+  const index = sorts.findIndex((sort) => sort.field === id);
+  const isActive = index !== -1;
+  const direction = isActive ? sorts[index].direction : null;
+  const Icon = direction === 'asc' ? CaretUpIcon : direction === 'desc' ? CaretDownIcon : CaretUpDownIcon;
+  const next = direction === null ? 'asc' : direction === 'asc' ? 'desc' : 'asc';
 
   return (
     <button
       type="button"
       onClick={() => onSortChange(id)}
-      aria-label={`Sort by ${label} ${nextOrder === 'asc' ? 'ascending' : 'descending'}`}
+      aria-label={`Sort by ${label} ${next === 'asc' ? 'ascending' : 'descending'}`}
       className="group inline-flex items-center gap-1 uppercase hover:text-foreground"
     >
       {label}
-      <Icon
-        className={`size-3.5 ${isActive ? 'text-primary' : 'text-muted-foreground/60 group-hover:text-muted-foreground'}`}
-        weight={isActive ? 'fill' : 'regular'}
-      />
+      {isActive ? (
+        <>
+          <span className="text-[10px] leading-none text-primary">
+            {PRIORITY_MARKS[index] ?? String(index + 1)}
+          </span>
+          <Icon
+            className="size-3.5 text-primary"
+            weight="fill"
+          />
+        </>
+      ) : (
+        <Icon
+          className="size-3.5 text-muted-foreground/60 group-hover:text-muted-foreground"
+          weight="regular"
+        />
+      )}
     </button>
   );
 }
 
 type CandidateTableProps = {
   candidates: Candidate[];
-  sortBy: CandidateSortField;
-  sortOrder: SortOrder;
+  sorts: ActiveSort[];
   onSortChange: (field: CandidateSortField) => void;
   onSelectCandidate: (candidate: Candidate) => void;
   onToggleShortlist: (candidate: Candidate) => void;
@@ -60,14 +74,13 @@ type CandidateTableProps = {
 
 export function CandidateTable({
   candidates,
-  sortBy,
-  sortOrder,
+  sorts,
   onSortChange,
   onSelectCandidate,
   onToggleShortlist,
   disabled,
 }: CandidateTableProps) {
-  const sorting = [{ id: sortBy, desc: sortOrder === 'desc' }];
+  const sorting = sorts.map((sort) => ({ id: sort.field, desc: sort.direction === 'desc' }));
 
   const columns = [
     columnHelper.display({
@@ -87,7 +100,7 @@ export function CandidateTable({
     }),
     columnHelper.accessor('name', {
       id: 'name',
-      header: () => <SortHeader label="Name" id="name" sortBy={sortBy} sortOrder={sortOrder} onSortChange={onSortChange} />,
+      header: () => <SortHeader label="Name" id="name" sorts={sorts} onSortChange={onSortChange} />,
       cell: ({ row }) => (
         <button
           type="button"
@@ -100,12 +113,12 @@ export function CandidateTable({
     }),
     columnHelper.accessor('target_role', {
       id: 'target_role',
-      header: () => <SortHeader label="Role" id="target_role" sortBy={sortBy} sortOrder={sortOrder} onSortChange={onSortChange} />,
+      header: () => <SortHeader label="Role" id="target_role" sorts={sorts} onSortChange={onSortChange} />,
       cell: ({ row }) => <span className="text-sm text-foreground">{row.original.target_role}</span>,
     }),
     columnHelper.accessor('years_experience', {
       id: 'years_experience',
-      header: () => <SortHeader label="Experience" id="years_experience" sortBy={sortBy} sortOrder={sortOrder} onSortChange={onSortChange} />,
+      header: () => <SortHeader label="Experience" id="years_experience" sorts={sorts} onSortChange={onSortChange} />,
       cell: ({ row }) => (
         <span className="text-sm text-muted-foreground tabular-nums">
           {formatYears(row.original.years_experience)}
@@ -126,7 +139,7 @@ export function CandidateTable({
     }),
     columnHelper.accessor('applied_date', {
       id: 'applied_date',
-      header: () => <SortHeader label="Applied" id="applied_date" sortBy={sortBy} sortOrder={sortOrder} onSortChange={onSortChange} />,
+      header: () => <SortHeader label="Applied" id="applied_date" sorts={sorts} onSortChange={onSortChange} />,
       cell: ({ row }) => (
         <span className="text-sm text-muted-foreground tabular-nums">
           {formatAppliedDate(row.original.applied_date)}
@@ -161,25 +174,28 @@ export function CandidateTable({
         <TableHeader>
           {headerGroups.map((headerGroup) => (
             <TableRow key={headerGroup.id} className="border-b border-border bg-muted/50 hover:bg-muted/50">
-              {headerGroup.headers.map((header) => (
-                <TableHead
-                  key={header.id}
-                  className={`h-9 px-3 text-[11px] font-semibold tracking-wide text-muted-foreground ${
-                    NAMED_COLUMNS.has(header.id as CandidateSortField) ? 'cursor-pointer select-none' : ''
-                  } ${String((header.column.columnDef.meta as { className?: string } | undefined)?.className ?? '')}`}
-                  aria-sort={
-                    header.column.getIsSorted() === 'asc'
+              {headerGroup.headers.map((header) => {
+                const activeIndex = sorts.findIndex((s) => s.field === header.id);
+                const ariaSort =
+                  activeIndex === -1
+                    ? undefined
+                    : sorts[activeIndex].direction === 'asc'
                       ? 'ascending'
-                      : header.column.getIsSorted() === 'desc'
-                        ? 'descending'
-                        : undefined
-                  }
-                >
-                  {header.isPlaceholder
-                    ? null
-                    : flexRender(header.column.columnDef.header, header.getContext())}
-                </TableHead>
-              ))}
+                      : 'descending';
+                return (
+                  <TableHead
+                    key={header.id}
+                    className={`h-9 px-3 text-[11px] font-semibold tracking-wide text-muted-foreground ${
+                      NAMED_COLUMNS.has(header.id as CandidateSortField) ? 'cursor-pointer select-none' : ''
+                    } ${String((header.column.columnDef.meta as { className?: string } | undefined)?.className ?? '')}`}
+                    aria-sort={ariaSort}
+                  >
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(header.column.columnDef.header, header.getContext())}
+                  </TableHead>
+                );
+              })}
             </TableRow>
           ))}
         </TableHeader>

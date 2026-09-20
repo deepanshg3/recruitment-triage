@@ -23,11 +23,11 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ApiError, listCandidates, matchCandidates, updateShortlist } from '@/lib/api';
 import type {
+  ActiveSort,
   Candidate,
   CandidateListResponse,
   CandidateSortField,
   MatchResponse,
-  SortOrder,
 } from '@/lib/types';
 
 const PAGE_SIZE = 20;
@@ -60,8 +60,7 @@ export function CandidatesPage() {
 
   const [filters, setFilters] = useState<CandidateFilterValues>(EMPTY_FILTERS);
   const [filterOptions, setFilterOptions] = useState<FilterOptions>(EMPTY_OPTIONS);
-  const [sortBy, setSortBy] = useState<CandidateSortField>('name');
-  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+  const [sorts, setSorts] = useState<ActiveSort[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(PAGE_SIZE);
 
@@ -92,8 +91,7 @@ export function CandidatesPage() {
       min_experience: filters.min_experience,
       max_experience: filters.max_experience,
       is_shortlisted: filters.is_shortlisted,
-      sort_by: sortBy,
-      sort_order: sortOrder,
+      sorts: sorts.length > 0 ? sorts : undefined,
       page,
       page_size: pageSize,
     })
@@ -111,7 +109,7 @@ export function CandidatesPage() {
     return () => {
       ignore = true;
     };
-  }, [appliedSearch, filters, sortBy, sortOrder, page, pageSize, refreshKey]);
+  }, [appliedSearch, filters, sorts, page, pageSize, refreshKey]);
 
   useEffect(() => {
     let ignore = false;
@@ -170,18 +168,29 @@ export function CandidatesPage() {
     setFilters(EMPTY_FILTERS);
     setSearchText('');
     setAppliedSearch('');
+    setSorts([]);
     setPage(1);
   }, []);
 
   const handleSortChange = useCallback((field: CandidateSortField) => {
-    setSortBy((currentBy) => {
-      if (currentBy === field) {
-        setSortOrder((currentOrder) => (currentOrder === 'asc' ? 'desc' : 'asc'));
-        return currentBy;
+    setSorts((current) => {
+      const index = current.findIndex((sort) => sort.field === field);
+      if (index === -1) {
+        return [...current, { field, direction: 'asc' }];
       }
-      setSortOrder('asc');
-      return field;
+      if (current[index].direction === 'asc') {
+        const next = [...current];
+        next[index] = { field, direction: 'desc' };
+        return next;
+      }
+      return current.filter((sort) => sort.field !== field);
     });
+    setPage(1);
+  }, []);
+
+  const handleRemoveSort = useCallback((field: CandidateSortField) => {
+    setSorts((current) => current.filter((sort) => sort.field !== field));
+    setPage(1);
   }, []);
 
   function patchCandidate(updated: Candidate) {
@@ -288,6 +297,8 @@ export function CandidatesPage() {
           activeCount={activeCount}
           search={appliedSearch}
           onRemoveSearch={handleSearchClear}
+          sorts={sorts}
+          onRemoveSort={handleRemoveSort}
           disabled={loading}
         />
 
@@ -312,8 +323,7 @@ export function CandidatesPage() {
           ) : data && !loading ? (
             <CandidateTable
               candidates={data.items}
-              sortBy={sortBy}
-              sortOrder={sortOrder}
+              sorts={sorts}
               onSortChange={handleSortChange}
               onSelectCandidate={(candidate) => setDrawerCandidate(candidate)}
               onToggleShortlist={handleToggleShortlist}

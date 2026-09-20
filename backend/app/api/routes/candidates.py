@@ -28,8 +28,12 @@ router = APIRouter(prefix="/candidates", tags=["Candidates"])
         "and source accept comma-separated lists where multiple values are "
         "OR-ed together (e.g. `target_role=Backend Engineer,Full-Stack "
         "Engineer`). Skills accepts a comma-separated list; a candidate must "
-        "contain ALL requested skills. Sorting is restricted to a whitelist "
-        "with stable id tie-breaking. This endpoint never calls the LLM."
+        "contain ALL requested skills. Sorting is multi-column: `sort_by` and "
+        "`sort_order` accept comma-separated lists of equal length where the "
+        "first entry is the primary sort (e.g. `sort_by=years_experience,"
+        "applied_date&sort_order=desc,asc`). Sorting is restricted to a "
+        "whitelist with stable id tie-breaking. This endpoint never calls the "
+        "LLM."
     ),
 )
 def list_candidates_endpoint(

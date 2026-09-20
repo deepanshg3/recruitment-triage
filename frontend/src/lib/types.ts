@@ -26,6 +26,12 @@ export type CandidateSortField =
 
 export type SortOrder = 'asc' | 'desc';
 
+/** One active sort; index in the array defines priority (0 = primary). */
+export type ActiveSort = {
+  field: CandidateSortField;
+  direction: SortOrder;
+};
+
 export type CandidateListParams = {
   search?: string;
   /** Multiple values are OR-ed together within the category. */
@@ -37,8 +43,8 @@ export type CandidateListParams = {
   /** ALL selected skills must be present on a candidate. */
   skills?: string[];
   is_shortlisted?: boolean;
-  sort_by?: CandidateSortField;
-  sort_order?: SortOrder;
+  /** Ordered list of active sorts; index 0 is the primary sort. */
+  sorts?: ActiveSort[];
   page?: number;
   page_size?: number;
 };

@@ -1,9 +1,16 @@
 import { useEffect, useState } from 'react';
-import { SlidersIcon, XIcon } from '@phosphor-icons/react';
+import {
+  ArrowsDownUpIcon,
+  CaretDownIcon,
+  CaretUpIcon,
+  SlidersIcon,
+  XIcon,
+} from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import type { ActiveSort, CandidateSortField } from '@/lib/types';
 import { MultiSelect } from './MultiSelect';
 
 export type CandidateFilterValues = {
@@ -30,7 +37,17 @@ type CandidateFiltersProps = {
   /** Applied search query; rendered as a removable chip in the filter area. */
   search?: string;
   onRemoveSearch: () => void;
+  /** Active sorts in priority order; rendered separately from filters. */
+  sorts?: ActiveSort[];
+  onRemoveSort: (field: CandidateSortField) => void;
   disabled?: boolean;
+};
+
+const SORT_LABELS: Record<CandidateSortField, string> = {
+  name: 'Name',
+  target_role: 'Role',
+  years_experience: 'Experience',
+  applied_date: 'Applied',
 };
 
 function parseExperience(raw: string): number | undefined {
@@ -96,6 +113,8 @@ export function CandidateFilters({
   activeCount,
   search,
   onRemoveSearch,
+  sorts = [],
+  onRemoveSort,
   disabled,
 }: CandidateFiltersProps) {
   const shortlisted: 'any' | 'true' | 'false' =
@@ -271,10 +290,52 @@ export function CandidateFilters({
           <span />
         )}
 
-        <Button variant="outline" size="sm" onClick={onClear} disabled={disabled || activeCount === 0}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onClear}
+          disabled={disabled || (activeCount === 0 && sorts.length === 0)}
+        >
           Clear filters
         </Button>
       </div>
+
+      {sorts.length > 0 ? (
+        <div className="mt-3 border-t border-border pt-3">
+          <div className="flex items-center gap-2">
+            <ArrowsDownUpIcon className="size-4 text-primary" />
+            <h3 className="text-xs font-semibold tracking-wide text-foreground uppercase">Sort</h3>
+            <span className="rounded-none bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+              {sorts.length} active
+            </span>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            {sorts.map((sort, index) => (
+              <span
+                key={sort.field}
+                className="inline-flex items-center gap-1 border border-border bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground"
+              >
+                {index + 1} · {SORT_LABELS[sort.field]}
+                {sort.direction === 'asc' ? (
+                  <CaretUpIcon className="size-3 text-primary" weight="bold" />
+                ) : (
+                  <CaretDownIcon className="size-3 text-primary" weight="bold" />
+                )}
+                <button
+                  type="button"
+                  onClick={() => onRemoveSort(sort.field)}
+                  aria-label={`Remove sort ${SORT_LABELS[sort.field]} ${
+                    sort.direction === 'asc' ? 'ascending' : 'descending'
+                  }`}
+                  className="text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <XIcon className="size-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

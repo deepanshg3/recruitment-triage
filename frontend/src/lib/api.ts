@@ -80,8 +80,10 @@ export function listCandidates(params: CandidateListParams): Promise<CandidateLi
   if (params.is_shortlisted !== undefined) {
     set('is_shortlisted', params.is_shortlisted ? 'true' : 'false');
   }
-  set('sort_by', params.sort_by as unknown as string);
-  set('sort_order', params.sort_order as unknown as string);
+  if (params.sorts && params.sorts.length > 0) {
+    set('sort_by', params.sorts.map((sort) => sort.field).join(','));
+    set('sort_order', params.sorts.map((sort) => sort.direction).join(','));
+  }
   set('page', params.page);
   set('page_size', params.page_size);
 

@@ -225,6 +225,86 @@ def test_sort_by_applied_date_desc(api_client):
     ]
 
 
+def test_multi_column_sort_primary_then_secondary(api_client):
+    # Primary: years_experience ASC; secondary: applied_date DESC for ties.
+    # exp 2 tie (bob 2025, erika 2026) -> erika before bob.
+    r = api_client.get(
+        "/candidates",
+        params={
+            "sort_by": "years_experience,applied_date",
+            "sort_order": "asc,desc",
+        },
+    ).json()
+    assert _ids(r["items"]) == ["cand_e", "cand_b", "cand_d", "cand_a", "cand_c"]
+
+
+def test_multi_column_sort_whitespace_and_case_normalized(api_client):
+    # Tokens may have extra whitespace/case; still validated and applied.
+    r = api_client.get(
+        "/candidates",
+        params={
+            "sort_by": "years_experience,applied_date",
+            "sort_order": "asc,desC",
+        },
+    ).json()
+    assert _ids(r["items"]) == ["cand_e", "cand_b", "cand_d", "cand_a", "cand_c"]
+
+
+def test_multi_column_sort_combines_with_filters(api_client):
+    # Filter AND + multi-column sort priority preserved.
+    r = api_client.get(
+        "/candidates",
+        params={
+            "target_role": "Backend Engineer",
+            "sort_by": "years_experience,applied_date",
+            "sort_order": "asc,desc",
+        },
+    ).json()
+    # Backend engineers: 5y alice (2026-09-01), 8y carol (2026-08-20),
+    # 2y erika (2026-07-10).
+    assert _ids(r["items"]) == ["cand_e", "cand_a", "cand_c"]
+
+
+def test_multi_column_sort_last_pass_wins_priority(api_client):
+    # Primary: applied_date DESC; secondary: years_experience ASC.
+    r = api_client.get(
+        "/candidates",
+        params={
+            "sort_by": "applied_date,years_experience",
+            "sort_order": "desc,asc",
+        },
+    ).json()
+    assert _ids(r["items"]) == ["cand_a", "cand_c", "cand_e", "cand_b", "cand_d"]
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        # Mismatched number of fields/directions.
+        {"sort_by": "name,applied_date", "sort_order": "asc"},
+        {"sort_by": "name", "sort_order": "asc,desc"},
+        # Duplicate sort field.
+        {"sort_by": "name,name", "sort_order": "asc,desc"},
+        # Invalid field in a multi-column list.
+        {"sort_by": "name,not_a_real_column", "sort_order": "asc,desc"},
+        # Invalid direction in a multi-column list.
+        {"sort_by": "name,applied_date", "sort_order": "asc,up"},
+        # Explicit empty sort input.
+        {"sort_by": "", "sort_order": ""},
+        {"sort_by": ",   ,", "sort_order": ",  ,"},
+    ],
+)
+def test_invalid_multi_column_sort_returns_400(api_client, params):
+    r = api_client.get("/candidates", params=params)
+    assert r.status_code == 400
+    assert "sort" in r.json()["detail"].lower()
+
+
+def test_default_sort_is_name_asc(api_client):
+    r = api_client.get("/candidates").json()
+    assert _ids(r["items"]) == ["cand_a", "cand_b", "cand_c", "cand_d", "cand_e"]
+
+
 @pytest.mark.parametrize(
     "params",
     [

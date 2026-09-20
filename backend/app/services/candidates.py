@@ -115,17 +115,46 @@ def _validate_experience(min_experience: int | None, max_experience: int | None)
         )
 
 
-def _validate_sort(sort_by: str, sort_order: str) -> None:
-    if sort_by not in SORT_FIELDS:
+def _validate_sort(sort_by: str, sort_order: str) -> list[tuple[str, str]]:
+    """Parse comma-separated sort specs into an ordered [(field, direction)].
+
+    Earlier fields win: index 0 is the primary sort, index 1 secondary, etc.
+    Each field/direction is validated against the whitelist. Empty, duplicate,
+    or length-mismatched inputs are rejected so ordering is never ambiguous.
+    """
+    fields = [f.strip().lower() for f in sort_by.split(",") if f.strip()]
+    orders = [o.strip().lower() for o in sort_order.split(",") if o.strip()]
+
+    if not fields:
         raise InvalidQueryError(
-            f"Invalid sort_by {sort_by!r}: allowed values are "
-            f"{', '.join(SORT_FIELDS)}."
+            "Invalid sort input: 'sort_by' must contain at least one sort field."
         )
-    if sort_order not in SORT_ORDERS:
+    if len(fields) != len(orders):
         raise InvalidQueryError(
-            f"Invalid sort_order {sort_order!r}: allowed values are "
-            f"{', '.join(SORT_ORDERS)}."
+            f"sort_by and sort_order must contain the same number of values "
+            f"(got {len(fields)} sort_by vs {len(orders)} sort_order)."
         )
+
+    seen = set()
+    for field in fields:
+        if field not in SORT_FIELDS:
+            raise InvalidQueryError(
+                f"Invalid sort_by {field!r}: allowed values are "
+                f"{', '.join(SORT_FIELDS)}."
+            )
+        if field in seen:
+            raise InvalidQueryError(
+                f"Duplicate sort field {field!r}: each column can only appear once."
+            )
+        seen.add(field)
+    for order in orders:
+        if order not in SORT_ORDERS:
+            raise InvalidQueryError(
+                f"Invalid sort_order {order!r}: allowed values are "
+                f"{', '.join(SORT_ORDERS)}."
+            )
+
+    return list(zip(fields, orders))
 
 
 def _matches(candidate: Candidate, filters: dict) -> bool:
@@ -207,11 +236,15 @@ def list_candidates(
     ``target_role`` and ``source`` accept comma-separated lists; multiple
     values within one list are OR-ed together. ``skills`` accepts a
     comma-separated list and a candidate must contain ALL requested skills.
-    Raises InvalidQueryError for invalid filter/sort/pagination values.
+    ``sort_by``/``sort_order`` accept comma-separated lists of equal length;
+    the first entry is the primary sort, later entries are secondary sorts in
+    priority order (e.g. ``sort_by=years_experience,applied_date`` with
+    ``sort_order=desc,asc``). Returns CandidatePage; raises InvalidQueryError
+    for invalid filter/sort/pagination values.
     """
-    _validate_sort(sort_by, sort_order)
     _validate_pagination(page, page_size)
     _validate_experience(min_experience, max_experience)
+    sorts = _validate_sort(sort_by, sort_order)
 
     parsed_shortlist = _parse_bool(is_shortlisted, name="is_shortlisted")
     parsed_skills = _parse_skills(skills)
@@ -231,10 +264,14 @@ def list_candidates(
     candidates = db.execute(select(Candidate)).scalars().all()
 
     filtered = [c for c in candidates if _matches(c, filters)]
-    # Two-pass stable sort: base order by id, then by the primary sort field.
-    # Id remains the tie-break in ASCENDING order even when direction is desc.
+    # Stable multi-pass sort. Base order is id ascending, the final
+    # tie-breaker; then apply sorts from least to most significant so the
+    # primary (earliest) sort wins. Each pass is stable, so candidates equal
+    # on earlier keys keep their previous (secondary/id) order even when the
+    # direction is descending.
     filtered.sort(key=lambda c: c.id)
-    filtered.sort(key=_primary_key(sort_by), reverse=(sort_order == "desc"))
+    for field, order in reversed(sorts):
+        filtered.sort(key=_primary_key(field), reverse=(order == "desc"))
 
     total = len(filtered)
     start = (page - 1) * page_size
