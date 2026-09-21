@@ -3,4 +3,5 @@
 __pycache__/
 *.pyc
 *.db
+!recruitment.db
 .pytest_cache/
