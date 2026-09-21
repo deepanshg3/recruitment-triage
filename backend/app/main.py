@@ -7,6 +7,7 @@ from app.api.routes import health as health_router
 from app.api.routes import match as match_router
 from app.core.config import settings
 from app.db.database import init_db
+from app.db.preflight import run_preflight
 
 app = FastAPI(
     title=settings.app_name,
@@ -31,6 +32,11 @@ app.add_middleware(
 
 # Create SQLite database and tables on startup (no-op if they already exist).
 init_db()
+
+# Fail fast with a clear message if SQLite + sqlite-vec (vec0) cannot work on
+# this runtime - e.g. a Python build whose sqlite3 module has no loadable
+# extension support (Render's stock Python 3.13 image) and pysqlite3 is absent.
+run_preflight()
 
 api_errors.register_exception_handlers(app)
 

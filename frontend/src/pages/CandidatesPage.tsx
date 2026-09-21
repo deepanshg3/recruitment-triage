@@ -20,7 +20,7 @@ import { MatchResultsView } from '@/components/matching/MatchResultsView';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ApiError, listCandidates, matchCandidates, updateShortlist } from '@/lib/api';
+import { ApiError, checkHealth, listCandidates, matchCandidates, updateShortlist } from '@/lib/api';
 import type {
   ActiveSort,
   Candidate,
@@ -67,6 +67,7 @@ export function CandidatesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [appReady, setAppReady] = useState(false);
 
   const [drawerCandidate, setDrawerCandidate] = useState<Candidate | null>(null);
 
@@ -77,6 +78,18 @@ export function CandidatesPage() {
   const [view, setView] = useState<'candidates' | 'match'>('candidates');
 
   useEffect(() => {
+    // Wake the Render backend exactly once per page load, before the first
+    // data requests. While the health request is in flight (Render may be
+    // cold-starting the backend), the existing loading state stays on screen.
+    // A health failure is not fatal here: the data requests below surface the
+    // real error through the existing "Unable to load candidates" alert.
+    void checkHealth()
+      .catch(() => undefined)
+      .finally(() => setAppReady(true));
+  }, []);
+
+  useEffect(() => {
+    if (!appReady) return;
     let ignore = false;
 
     setLoading(true);
@@ -108,9 +121,10 @@ export function CandidatesPage() {
     return () => {
       ignore = true;
     };
-  }, [appliedSearch, filters, sorts, page, pageSize, refreshKey]);
+  }, [appliedSearch, filters, sorts, page, pageSize, refreshKey, appReady]);
 
   useEffect(() => {
+    if (!appReady) return;
     let ignore = false;
 
     listCandidates({ page_size: OPTIONS_PAGE_SIZE })
@@ -130,7 +144,7 @@ export function CandidatesPage() {
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [appReady]);
 
   const activeCount = useMemo(
     () =>

@@ -57,6 +57,25 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+let healthCheckPromise: Promise<void> | null = null;
+
+/**
+ * Wake the backend exactly once per full page load.
+ *
+ * Render cold-starts free-tier services on the first incoming request, so the
+ * heavyweight data requests below can hit a sleeping API. GET /health is cheap
+ * and is exactly what wakes it, so the app awaits this before the initial
+ * candidates/options loads. The module-level promise guarantees a single
+ * request per page load even if React StrictMode remounts components in dev —
+ * every mount just reuses the same in-flight promise.
+ */
+export function checkHealth(): Promise<void> {
+  if (healthCheckPromise === null) {
+    healthCheckPromise = request<{ status: string }>('/health').then(() => undefined);
+  }
+  return healthCheckPromise;
+}
+
 export function listCandidates(params: CandidateListParams): Promise<CandidateListResponse> {
   const search = new URLSearchParams();
   const set = (key: string, value: string | number | undefined | null) => {

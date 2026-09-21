@@ -1,27 +1,18 @@
-import sqlite_vec
 import pytest
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.db.database import Base
+from app.db.database import Base, register_vec_extension
+from app.db.dbapi import dbapi
 from app.models.candidate import Candidate
 from app.services.errors import EmbeddingResponseError
-
-
-def register_vec_extension(engine) -> None:
-    """Attach the sqlite-vec extension loader to a test engine."""
-
-    @event.listens_for(engine, "connect")
-    def _load(dbapi_connection, _record) -> None:
-        dbapi_connection.enable_load_extension(True)
-        sqlite_vec.load(dbapi_connection)
-        dbapi_connection.enable_load_extension(False)
 
 
 @pytest.fixture
 def tmp_engine(tmp_path):
     engine = create_engine(
         f"sqlite:///{tmp_path / 'test.db'}",
+        module=dbapi,
         connect_args={"check_same_thread": False},
     )
     register_vec_extension(engine)

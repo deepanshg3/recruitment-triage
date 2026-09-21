@@ -4,6 +4,7 @@ sqlalchemy
 pydantic
 pydantic-settings
 sqlite-vec
+pysqlite3-binary
 google-genai
 pytest
 httpx
